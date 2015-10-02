@@ -1,52 +1,102 @@
-#include <stdio.h>
-#include <cv.h>
-#include <highgui.h>
+#include <iostream>
+#include <signal.h>
+#include <opencv2/opencv.hpp>
+
+using namespace cv;
+using namespace std;
+
+volatile bool do_quit = false;
+
+extern "C" void sigint_handler(int) { do_quit = true; }
 
 int main()
 {
-	// Allocates and initializes cvCapture structure
-	// for reading a video stream from the camera.
-	// Index of camera is -1 since only one camera
-	// connected to the computer or it does not
-	// matter what camera to use.
-	CvCapture * input_camera = cvCaptureFromCAM(-1);
+	signal(SIGINT, sigint_handler);
 
-	// Grabs and returns a frame from camera
-	IplImage * frame = cvQueryFrame(input_camera);
+	VideoCapture webcam(0);
 
-	// Creates window for displaying the frames
-	// Flag is reset (0) --> change window size
-	// manually
-	cvNamedWindow("Capturing Image ...", 0);
-
-	// Change to the appropriate size. In GTK, the
-	// inappropriate size will return a segmentation
-	// fault. I don't know why ...
-	// Gets the appropriate size using cvGetCaptureProperty
-	// with CV_CAP_PROP_FRAME_HEIGHT and CV_CAP_PROP_FRAME_WIDTH
-	// as property_id
-	cvResizeWindow("Capturing Image ...",
-		(int)cvGetCaptureProperty(input_camera, CV_CAP_PROP_FRAME_HEIGHT),
-		(int)cvGetCaptureProperty(input_camera, CV_CAP_PROP_FRAME_WIDTH));
-
-	while (frame) {
-		// Shows a frame
-		cvShowImage("Capturing Image ...", frame);
-
-		// Checks if ESC is pressed and gives a delay
-		// so that the frame can be displayed properly
-		if (cvWaitKey(10) == 27)
-			break;
-
-		// Grabs and returns the next frame
-		frame = cvQueryFrame(input_camera);
+	if (!webcam.isOpened()) {
+		std::cout << "error: CANNOT OPEN CAM\n";
+		return -1;
 	}
 
-	// Release cvCapture structure
-	cvReleaseCapture(&input_camera);
+	std::cout << "frame size: width=" << webcam.get(CV_CAP_PROP_FRAME_WIDTH)
+			  << " height=" << webcam.get(CV_CAP_PROP_FRAME_HEIGHT) << "\n";
 
-	// Destroy the window
-	cvDestroyWindow("Capturing Image ...");
+	namedWindow("edges", CV_WINDOW_AUTOSIZE);
 
+	int filter = 0;
+
+	while (true) {
+		try {
+			Mat frame;
+			if (!webcam.read(frame)) {
+				std::cout << "error: cannot read frame from device\n";
+				break;
+			}
+			if (do_quit)
+				break;
+			if (!frame.empty()) {
+				switch (filter) {
+					case 0:
+						break;
+
+					case 1: {
+						GaussianBlur(frame, frame, Size(7, 7), 1.5, 1.5);
+						Canny(frame, frame, 0, 30, 3);
+					} break;
+
+					case 2: {
+						GaussianBlur(frame, frame, Size(7, 7), 1.5, 1.5);
+						Mat gray;
+						cvtColor(frame, gray, CV_BGR2GRAY);
+						std::vector<Vec3f> circles;
+						HoughCircles(
+							gray, circles, CV_HOUGH_GRADIENT, 2, gray.rows / 4, 200, 100, 0, 0);
+						for (size_t i = 0; i < circles.size(); ++i) {
+							Point center(cvRound(circles[i][0]), cvRound(circles[i][1]));
+							int radius = cvRound(circles[i][2]);
+							// draw the circle center
+							circle(frame, center, 3, Scalar(0, 255, 0), -1, 8, 0);
+							// draw the circle outline
+							circle(frame, center, radius, Scalar(0, 0, 255), 3, 8, 0);
+						}
+					} break;
+
+					case 3: {
+						GaussianBlur(frame, frame, Size(7, 7), 1.5, 1.5);
+						Canny(frame, frame, 10, 200, 3);
+						std::vector<Vec4i> lines;
+						HoughLinesP(frame, lines, 1, CV_PI / 180, 80, 30, 10);
+						for (size_t i = 0; i < lines.size(); i++) {
+							line(frame, Point(lines[i][0], lines[i][1]),
+								Point(lines[i][2], lines[i][3]), Scalar(0, 0, 255), 3, 8);
+						}
+					} break;
+				}
+
+				// display frame
+				imshow("edges", frame);
+			}
+
+			int key = waitKey(20);
+			if (key >= 0) {
+				key &= 0xff;
+				if (key == 27)
+					break;
+				if (key == '0')
+					filter = 0;
+				if (key == '1')
+					filter = 1;
+				if (key == '2')
+					filter = 2;
+				if (key == '3')
+					filter = 3;
+			}
+		} catch (Exception & e) {
+			std::cout << "error: " << e.what() << "\n";
+			return -1;
+		}
+	}
 	return 0;
 }

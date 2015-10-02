@@ -3,15 +3,15 @@
 CXX=g++
 CXXFLAGS=-std=c++11 -Wall -Wextra
 
-all : cam cam1
+all : cam
 
 cam : cam.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $^ `pkg-config --libs opencv --cflags`
 
-cam1 : cam1.cpp
+cam-c : cam-c.cpp
 	$(CXX) $(CXXFLAGS) -o $@ $^ `pkg-config --libs opencv --cflags`
 
 clean :
 	rm -f *.o
 	rm -f cam
-	rm -f cam1
+	rm -f cam-c
