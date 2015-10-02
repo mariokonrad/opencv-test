@@ -23,7 +23,7 @@ int main()
 	std::cout << "frame size: width=" << webcam.get(CV_CAP_PROP_FRAME_WIDTH)
 			  << " height=" << webcam.get(CV_CAP_PROP_FRAME_HEIGHT) << "\n";
 
-	namedWindow("edges", CV_WINDOW_AUTOSIZE);
+	namedWindow("cam", CV_WINDOW_AUTOSIZE);
 
 	int filter = 0;
 
@@ -76,7 +76,7 @@ int main()
 				}
 
 				// display frame
-				imshow("edges", frame);
+				imshow("cam", frame);
 			}
 
 			int key = waitKey(20);
