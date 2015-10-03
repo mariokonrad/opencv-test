@@ -11,6 +11,53 @@ extern "C" void sigint_handler(int) { do_quit = true; }
 
 template <class T> inline T sqr(T a) noexcept { return a * a; }
 
+static int threshold_value = 20;
+static int noise_blur = 10;
+static int min_area = 30 * 30;
+static bool motion_window_visible = false;
+
+static const std::string win_title_cam = "cam";
+static const std::string win_title_options = "options";
+static const std::string win_title_motion = "motion";
+
+static void on_trackbar(int value, void * ptr)
+{
+	if (ptr == &noise_blur) {
+		if (value < 1)
+			setTrackbarPos("noise blur", win_title_options, 1);
+	}
+}
+
+static void create_options_window()
+{
+	namedWindow(win_title_options, WINDOW_AUTOSIZE);
+	createTrackbar("threshold", win_title_options, &threshold_value, 30, on_trackbar);
+	createTrackbar("noise blur", win_title_options, &noise_blur, 20, on_trackbar, &noise_blur);
+	createTrackbar("min area", win_title_options, &min_area, 1600, on_trackbar, &min_area);
+}
+
+static void toggle_options_window()
+{
+	static bool visible = false;
+
+	if (visible) {
+		destroyWindow(win_title_options);
+	} else {
+		create_options_window();
+	}
+	visible = !visible;
+}
+
+static void toggle_motion_window()
+{
+	if (motion_window_visible) {
+		destroyWindow(win_title_motion);
+	} else {
+		namedWindow(win_title_motion, CV_WINDOW_AUTOSIZE);
+	}
+	motion_window_visible = !motion_window_visible;
+}
+
 int main()
 {
 	signal(SIGINT, sigint_handler);
@@ -27,8 +74,7 @@ int main()
 
 	std::cout << "frame size: width=" << width << " height=" << height << "\n";
 
-	namedWindow("cam", CV_WINDOW_AUTOSIZE);
-	//namedWindow("motion", CV_WINDOW_AUTOSIZE);
+	namedWindow(win_title_cam, CV_WINDOW_AUTOSIZE);
 
 	Mat frame0;
 	if (!webcam.read(frame0)) {
@@ -55,6 +101,10 @@ int main()
 				key &= 0xff;
 				if ((key == 27) || (key == 'q') || (key == 'Q'))
 					break;
+				if (key == 'o')
+					toggle_options_window();
+				if (key == 'm')
+					toggle_motion_window();
 			}
 
 			if (frame0.empty() || frame1.empty()) {
@@ -72,11 +122,11 @@ int main()
 			Mat diff;
 			absdiff(frame0_gray, frame1_gray, diff);
 			Mat threshold_image;
-			threshold(diff, threshold_image, 20, 255, THRESH_BINARY);
+			threshold(diff, threshold_image, threshold_value, 255, THRESH_BINARY);
 
 			// get rid of noise
-			blur(threshold_image, threshold_image, Size(10, 10));
-			threshold(threshold_image, threshold_image, 20, 255, THRESH_BINARY);
+			blur(threshold_image, threshold_image, Size(noise_blur, noise_blur));
+			threshold(threshold_image, threshold_image, threshold_value, 255, THRESH_BINARY);
 
 			// compute motion
 			Mat tmp;
@@ -85,16 +135,22 @@ int main()
 			vector<Vec4i> hierarchy;
 			findContours(tmp, contours, hierarchy, CV_RETR_EXTERNAL, CV_CHAIN_APPROX_SIMPLE);
 
+			// draw rectangles arround moving parts
 			Mat frame_copy;
 			frame1.copyTo(frame_copy);
 			for (auto const & c : contours) {
-				auto rect = boundingRect(c);
-				rectangle(frame_copy, rect, Scalar(0, 0, 255));
+				const Moments moment = moments(c);
+				double area = moment.m00;
+				if (area >= static_cast<double>(min_area)) {
+					auto rect = boundingRect(c);
+					rectangle(frame_copy, rect, Scalar(0, 0, 255));
+				}
 			}
 
 			// output
-			imshow("cam", frame_copy);
-			//imshow("motion", tmp);
+			imshow(win_title_cam, frame_copy);
+			if (motion_window_visible)
+				imshow(win_title_motion, tmp);
 
 			// save current image
 			frame0 = frame1;
