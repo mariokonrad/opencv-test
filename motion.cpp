@@ -81,6 +81,8 @@ int main()
 		std::cout << "error: cannot read frame from device\n";
 		return -1;
 	}
+	Mat frame0_gray;
+	cvtColor(frame0, frame0_gray, COLOR_BGR2GRAY);
 
 	while (true) {
 		try {
@@ -113,9 +115,7 @@ int main()
 			}
 
 			// filter
-			Mat frame0_gray;
 			Mat frame1_gray;
-			cvtColor(frame0, frame0_gray, COLOR_BGR2GRAY);
 			cvtColor(frame1, frame1_gray, COLOR_BGR2GRAY);
 
 			// compute difference
@@ -128,7 +128,7 @@ int main()
 			blur(threshold_image, threshold_image, Size(noise_blur, noise_blur));
 			threshold(threshold_image, threshold_image, threshold_value, 255, THRESH_BINARY);
 
-			// compute motion
+			// compute contours
 			Mat tmp;
 			threshold_image.copyTo(tmp);
 			vector<vector<Point>> contours;
@@ -154,6 +154,7 @@ int main()
 
 			// save current image
 			frame0 = frame1;
+			frame0_gray = frame1_gray;
 
 		} catch (Exception & e) {
 			std::cout << "error: " << e.what() << "\n";
